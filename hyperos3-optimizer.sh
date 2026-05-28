@@ -29,6 +29,9 @@ HyperOS Optimizer ADB Script
 
 Usage:
   ./hyperos3-optimizer.sh            Open the interactive menu
+  ./hyperos3-optimizer.sh full       Apply the Full Optimization preset
+  ./hyperos3-optimizer.sh full-debloat
+                          Apply Full Optimization + Recommended Debloat
   ./hyperos3-optimizer.sh on         Apply the Performance preset
   ./hyperos3-optimizer.sh off        Restore stock/default settings
   ./hyperos3-optimizer.sh status     Print current managed setting values
@@ -52,6 +55,15 @@ show_feature_help() {
 Feature Guide
 
 Presets
+  Full Optimization
+    Applies all optimization settings managed by this tool: Performance-style
+    multitasking, battery standby tweaks, telemetry disable, POCO/System
+    stacked recents, and the Wi-Fi multicast battery fix.
+
+  Full Optimization + Recommended Debloat
+    Applies Full Optimization, then opens the Canta-style Recommended debloat
+    flow. Package removal still requires an explicit YES confirmation.
+
   Performance
     Sets the phantom process limit to 512, forces 120Hz, restricts Xiaomi
     PowerKeeper, and disables common MIUI telemetry/ad services.
@@ -481,6 +493,28 @@ apply_performance_preset() {
     echo ">>> Done. Rebooting may be required for some changes."
 }
 
+apply_full_optimization_preset() {
+    echo ">>> Applying Full Optimization preset"
+    set_phantom_processes on 512
+    set_force_120hz on
+    set_powerkeeper on
+    set_doze_optimization on
+    set_gms_standby on
+    set_telemetry on
+    set_poco_stacked_recents on
+    set_wifi_multicast_fix on
+    echo ">>> Done. Rebooting is recommended."
+}
+
+apply_full_optimization_with_recommended_debloat_preset() {
+    echo ">>> Applying Full Optimization + Recommended Debloat preset"
+    apply_full_optimization_preset
+    echo
+    echo ">>> Starting Recommended debloat flow"
+    remove_debloat_packages recommended
+    echo ">>> Done. Rebooting is recommended."
+}
+
 apply_balanced_preset() {
     echo ">>> Applying Balanced preset"
     set_phantom_processes on 128
@@ -654,64 +688,70 @@ show_menu() {
 HyperOS Optimizer ADB Script
 
 Presets
-1) Performance preset
+1) Full Optimization preset
+   All optimization settings managed by this tool, without app debloat.
+2) Full Optimization + Recommended Debloat preset
+   Full Optimization, then Canta-style Recommended package removal.
+3) Performance preset
    Phantom 512 + Force 120Hz + restrict PowerKeeper + disable telemetry.
-2) Balanced preset
+4) Balanced preset
    Phantom 128 + default refresh + restore PowerKeeper + disable telemetry.
-3) Battery preset
+5) Battery preset
    Optimize Doze + attempt GMS Rare + default refresh + disable telemetry.
-4) Gaming preset
+6) Gaming preset
    Phantom 1024 + restrict PowerKeeper + Force 120Hz + disable telemetry.
-5) Restore stock/default settings
+7) Restore stock/default settings
    Reverts all settings managed by this script where possible.
 
 Individual options
-6) PowerKeeper
+8) PowerKeeper
    Reduces Xiaomi background app killing by changing PowerKeeper AppOps.
-7) Phantom process limit
+9) Phantom process limit
    Raises/removes Android's background process limit for multitasking.
-8) Doze whitelist optimization
+10) Doze whitelist optimization
    Removes/restores Facebook service packages in the Doze whitelist.
-9) GMS standby bucket
+11) GMS standby bucket
    Attempts to move Google Play Services/GSF between Rare and Active.
-10) Force 120Hz
+12) Force 120Hz
    Forces or restores system refresh-rate settings.
-11) Telemetry packages
+13) Telemetry packages
    Disables or re-enables common MIUI analytics/ad packages.
-12) System/POCO Launcher stacked recents
+14) System/POCO Launcher stacked recents
    Enables/restores the stacked recent apps layout on supported launchers.
-13) Wi-Fi multicast battery fix
+15) Wi-Fi multicast battery fix
    Removes/restores connectivity packages that may cause multicast wakelocks.
-14) Open hidden performance menu
+16) Open hidden performance menu
    Opens the ROM's hidden battery/performance activity when available.
-15) Show current status
+17) Show current status
    Prints the values managed by this script.
-16) Canta-style debloat
+18) Canta-style debloat
    Lists/removes installed packages by UAD recommendation level.
-17) Feature guide
+19) Feature guide
    Shows detailed explanations and trade-offs.
 0) Exit
 EOF
         printf "Select: "
         read -r choice
         case "$choice" in
-            1) apply_performance_preset; pause ;;
-            2) apply_balanced_preset; pause ;;
-            3) apply_battery_preset; pause ;;
-            4) apply_gaming_preset; pause ;;
-            5) apply_stock_preset; pause ;;
-            6) ask_on_off "PowerKeeper" set_powerkeeper; pause ;;
-            7) ask_on_off "Phantom process limit" set_phantom_processes; pause ;;
-            8) ask_on_off "Doze whitelist optimization" set_doze_optimization; pause ;;
-            9) ask_on_off "GMS standby bucket" set_gms_standby; pause ;;
-            10) ask_on_off "Force 120Hz" set_force_120hz; pause ;;
-            11) ask_on_off "Telemetry packages" set_telemetry; pause ;;
-            12) ask_on_off "System/POCO Launcher stacked recents" set_poco_stacked_recents; pause ;;
-            13) ask_on_off "Wi-Fi multicast battery fix" set_wifi_multicast_fix; pause ;;
-            14) open_hidden_performance_menu; pause ;;
-            15) show_status; pause ;;
-            16) show_canta_debloat_menu ;;
-            17) show_feature_help; pause ;;
+            1) apply_full_optimization_preset; pause ;;
+            2) apply_full_optimization_with_recommended_debloat_preset; pause ;;
+            3) apply_performance_preset; pause ;;
+            4) apply_balanced_preset; pause ;;
+            5) apply_battery_preset; pause ;;
+            6) apply_gaming_preset; pause ;;
+            7) apply_stock_preset; pause ;;
+            8) ask_on_off "PowerKeeper" set_powerkeeper; pause ;;
+            9) ask_on_off "Phantom process limit" set_phantom_processes; pause ;;
+            10) ask_on_off "Doze whitelist optimization" set_doze_optimization; pause ;;
+            11) ask_on_off "GMS standby bucket" set_gms_standby; pause ;;
+            12) ask_on_off "Force 120Hz" set_force_120hz; pause ;;
+            13) ask_on_off "Telemetry packages" set_telemetry; pause ;;
+            14) ask_on_off "System/POCO Launcher stacked recents" set_poco_stacked_recents; pause ;;
+            15) ask_on_off "Wi-Fi multicast battery fix" set_wifi_multicast_fix; pause ;;
+            16) open_hidden_performance_menu; pause ;;
+            17) show_status; pause ;;
+            18) show_canta_debloat_menu ;;
+            19) show_feature_help; pause ;;
             0) exit 0 ;;
             *) echo "Invalid selection."; pause ;;
         esac
@@ -732,6 +772,8 @@ case "${1:-menu}" in
         check_device
         case "${1:-menu}" in
             menu) show_menu ;;
+            full) apply_full_optimization_preset ;;
+            full-debloat) apply_full_optimization_with_recommended_debloat_preset ;;
             on) apply_performance_preset ;;
             off) apply_stock_preset ;;
             status) show_status ;;

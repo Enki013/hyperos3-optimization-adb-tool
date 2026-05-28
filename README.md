@@ -7,7 +7,7 @@ The script is designed for users who want a clear menu, reversible actions, and 
 ## Features
 
 - Interactive terminal menu
-- Performance, Balanced, Battery, Gaming, and Stock/Default presets
+- Full Optimization, Full Optimization + Recommended Debloat, Performance, Balanced, Battery, Gaming, and Stock/Default presets
 - PowerKeeper AppOps control
 - Phantom process limit control for multitasking
 - Doze whitelist optimization for selected packages
@@ -48,6 +48,18 @@ Open the interactive menu:
 
 ```bash
 ./hyperos3-optimizer.sh
+```
+
+Apply the Full Optimization preset directly:
+
+```bash
+./hyperos3-optimizer.sh full
+```
+
+Apply Full Optimization and then run Recommended debloat:
+
+```bash
+./hyperos3-optimizer.sh full-debloat
 ```
 
 Apply the Performance preset directly:
@@ -105,6 +117,23 @@ Restore packages removed by this tool:
 ```
 
 ## Presets
+
+### Full Optimization
+
+- Sets phantom process limit to `512`
+- Forces 120Hz refresh-rate settings
+- Restricts Xiaomi PowerKeeper AppOps
+- Optimizes selected Doze whitelist entries
+- Attempts to move Google Play Services and GSF to the Rare standby bucket
+- Disables common MIUI telemetry/ad packages
+- Enables System/POCO Launcher stacked recents
+- Applies the optional Wi-Fi multicast battery fix
+
+### Full Optimization + Recommended Debloat
+
+- Applies everything in Full Optimization
+- Starts the Canta-style `Recommended` debloat flow
+- Still asks for explicit `YES` confirmation before removing packages
 
 ### Performance
 
