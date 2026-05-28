@@ -136,7 +136,7 @@ EOF
 }
 
 adb_shell() {
-    adb shell "$@"
+    adb shell "$@" < /dev/null
 }
 
 run_cmd() {
