@@ -16,6 +16,7 @@ The script is designed for users who want a clear menu, reversible actions, and 
 - MIUI telemetry/ad package disable and restore
 - System/POCO Launcher stacked recent apps toggle
 - Optional Wi-Fi multicast wakelock battery fix
+- Canta-style debloat menu powered by the Universal Debloater Alliance list
 - Status screen for all managed settings
 - Detailed feature guide built into the script
 
@@ -23,6 +24,7 @@ The script is designed for users who want a clear menu, reversible actions, and 
 
 - macOS, Linux, or another Unix-like shell environment
 - Android platform-tools with `adb` available in `PATH`
+- `python3` for parsing the Universal Debloater Alliance package list
 - USB debugging enabled on the phone
 - One authorized Android device connected over ADB
 
@@ -70,6 +72,36 @@ Show detailed feature explanations:
 
 ```bash
 ./hyperos3-optimizer.sh explain
+```
+
+Open the Canta-style debloat menu:
+
+```bash
+./hyperos3-optimizer.sh debloat
+```
+
+Update the Universal Debloater Alliance package list:
+
+```bash
+./hyperos3-optimizer.sh update-list
+```
+
+List installed Recommended packages:
+
+```bash
+./hyperos3-optimizer.sh list-recommended
+```
+
+Remove installed Recommended packages:
+
+```bash
+./hyperos3-optimizer.sh remove-recommended
+```
+
+Restore packages removed by this tool:
+
+```bash
+./hyperos3-optimizer.sh restore-debloat
 ```
 
 ## Presets
@@ -155,6 +187,29 @@ settings put global task_stack_view_layout_style 2
 
 If your launcher does not support the feature, the setting may have no visible effect.
 
+### Canta-style debloat
+
+The debloat menu downloads the [Universal Debloater Alliance](https://github.com/Universal-Debloater-Alliance/universal-android-debloater-next-generation/) package list, compares it with packages installed on the connected device, and groups matching packages by recommendation level:
+
+- `Recommended`: safest removal target; usually pointless or replaceable packages
+- `Advanced`: can break minor or device-specific functionality
+- `Expert`: can break important functionality
+- `Unsafe`: can break vital OS functionality
+
+The script removes packages for the current Android user with:
+
+```bash
+pm uninstall --user 0 <package>
+```
+
+Packages removed through this tool are recorded in `removed-packages.txt`, so they can be restored later with:
+
+```bash
+cmd package install-existing <package>
+```
+
+This is similar in spirit to Canta, but it is still a shell script. Always review the package list before confirming removal.
+
 ## Safety
 
 This project uses ADB shell commands that modify system settings for the current user. Most actions are reversible from the menu, but device behavior can vary by ROM, region, launcher version, and HyperOS build.
@@ -165,8 +220,8 @@ Review the script before running it. Use at your own risk.
 
 - [HyperOS battery drain community guide](https://www.reddit.com/r/Xiaomi/comments/1qxo8vi/guide_fixed_severe_battery_drain_after_hyperos_3/)
 - [System/POCO Launcher stacked recents community guide](https://www.reddit.com/r/PocoPhones/comments/1r20p9i/poco_launcher_new_update_stacked_recent_menu_how/)
+- [Universal Debloater Alliance package list](https://github.com/Universal-Debloater-Alliance/universal-android-debloater-next-generation/)
 
 ## Disclaimer
 
 This project is not affiliated with Xiaomi, Redmi, POCO, Google, or Microsoft.
-

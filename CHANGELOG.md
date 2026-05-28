@@ -8,4 +8,4 @@
 - Added status and feature guide commands.
 - Added System/POCO Launcher stacked recents toggle.
 - Added optional Wi-Fi multicast battery fix.
-
+- Added Canta-style debloat menu using the Universal Debloater Alliance list.

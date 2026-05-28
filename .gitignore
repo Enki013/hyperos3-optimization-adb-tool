@@ -1,4 +1,5 @@
 .DS_Store
 *.log
 *.tmp
-
+uad_lists.json
+removed-packages.txt

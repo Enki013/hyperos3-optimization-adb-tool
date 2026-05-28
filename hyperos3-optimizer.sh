@@ -2,7 +2,11 @@
 
 set -u
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 USER_ID=0
+UAD_LIST_URL="https://raw.githubusercontent.com/Universal-Debloater-Alliance/universal-android-debloater-next-generation/main/resources/assets/uad_lists.json"
+UAD_CACHE_FILE="$SCRIPT_DIR/uad_lists.json"
+DEBLOAT_HISTORY_FILE="$SCRIPT_DIR/removed-packages.txt"
 POWERKEEPER_OPS=("WRITE_SETTINGS" "GET_USAGE_STATS" "RUN_IN_BACKGROUND")
 DOZE_PACKAGES=("com.facebook.services" "com.facebook.appmanager")
 GMS_PACKAGES=("com.google.android.gms" "com.google.android.gsf")
@@ -29,14 +33,17 @@ Usage:
   ./hyperos3-optimizer.sh off        Restore stock/default settings
   ./hyperos3-optimizer.sh status     Print current managed setting values
   ./hyperos3-optimizer.sh explain    Show detailed feature descriptions
+  ./hyperos3-optimizer.sh debloat    Open the Canta-style debloat menu
   ./hyperos3-optimizer.sh help       Show this help message
 
 Requirements:
   - Android platform-tools / adb installed
+  - python3 installed for Canta-style debloat list parsing
   - USB debugging enabled
   - One authorized device connected with adb
 
 All actions use standard adb shell commands and can be reverted from the menu.
+Canta-style debloat actions use the Universal Debloater Alliance package list.
 EOF
 }
 
@@ -117,6 +124,14 @@ Individual Options
   Hidden performance menu
     Attempts to open com.android.settings.fuelgauge.PowerModeSettings. This
     activity is not available on every ROM.
+
+  Canta-style debloat
+    Downloads the Universal Debloater Alliance package list, compares it with
+    packages installed for the current Android user, and lets you list or
+    remove packages by recommendation level. Recommended packages are the
+    safest removal target. Advanced, Expert, and Unsafe categories can break
+    device features and should only be used by people who understand the
+    trade-off.
 EOF
 }
 
@@ -152,6 +167,167 @@ check_device() {
         echo "No authorized adb device was found."
         exit 1
     fi
+}
+
+ensure_python3() {
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "python3 was not found. It is required for parsing the Universal Debloater Alliance list."
+        exit 1
+    fi
+}
+
+download_uad_list() {
+    echo ">>> Updating Universal Debloater Alliance package list"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$UAD_LIST_URL" -o "$UAD_CACHE_FILE"
+    else
+        ensure_python3
+        python3 - "$UAD_LIST_URL" "$UAD_CACHE_FILE" <<'PY'
+import sys
+import urllib.request
+
+url, output = sys.argv[1], sys.argv[2]
+with urllib.request.urlopen(url, timeout=30) as response:
+    data = response.read()
+with open(output, "wb") as file:
+    file.write(data)
+PY
+    fi
+
+    if [ ! -s "$UAD_CACHE_FILE" ]; then
+        echo "Failed to download the package list."
+        return 1
+    fi
+
+    echo "Saved: $UAD_CACHE_FILE"
+}
+
+ensure_uad_list() {
+    ensure_python3
+    if [ ! -s "$UAD_CACHE_FILE" ]; then
+        download_uad_list
+    fi
+}
+
+write_installed_packages() {
+    local output_file="$1"
+    adb_shell pm list packages --user "$USER_ID" |
+        sed 's/^package://' |
+        tr -d '\r' |
+        sort -u > "$output_file"
+}
+
+create_debloat_plan() {
+    local recommendation="$1"
+    local output_file="$2"
+    local installed_file
+    installed_file=$(mktemp)
+    write_installed_packages "$installed_file"
+    ensure_uad_list
+
+    python3 - "$UAD_CACHE_FILE" "$installed_file" "$recommendation" > "$output_file" <<'PY'
+import json
+import sys
+
+uad_path, installed_path, recommendation = sys.argv[1], sys.argv[2], sys.argv[3].lower()
+
+with open(installed_path, "r", encoding="utf-8") as file:
+    installed = {line.strip() for line in file if line.strip()}
+
+with open(uad_path, "r", encoding="utf-8") as file:
+    data = json.load(file)
+
+rows = []
+for package_name, info in data.items():
+    if package_name not in installed:
+        continue
+    if str(info.get("removal", "")).lower() != recommendation:
+        continue
+    description = " ".join(str(info.get("description", "")).split())
+    rows.append((package_name, description))
+
+for package_name, description in sorted(rows):
+    print(f"{package_name}\t{description}")
+PY
+    rm -f "$installed_file"
+}
+
+list_debloat_packages() {
+    local recommendation="$1"
+    local plan_file
+    plan_file=$(mktemp)
+    create_debloat_plan "$recommendation" "$plan_file"
+
+    local count
+    count=$(wc -l < "$plan_file" | tr -d ' ')
+    echo ">>> Installed $recommendation packages found: $count"
+    if [ "$count" -gt 0 ]; then
+        awk -F '\t' '{ printf "- %s\n  %s\n", $1, $2 }' "$plan_file"
+    fi
+    rm -f "$plan_file"
+}
+
+remove_debloat_packages() {
+    local recommendation="$1"
+    local plan_file
+    plan_file=$(mktemp)
+    create_debloat_plan "$recommendation" "$plan_file"
+
+    local count
+    count=$(wc -l < "$plan_file" | tr -d ' ')
+    if [ "$count" -eq 0 ]; then
+        echo "No installed $recommendation packages were found."
+        rm -f "$plan_file"
+        return
+    fi
+
+    echo "Found $count installed $recommendation packages."
+    awk -F '\t' '{ printf "- %s\n", $1 }' "$plan_file"
+    echo
+    if [ "$recommendation" != "recommended" ]; then
+        echo "Warning: $recommendation packages can break device features."
+    fi
+    printf "Remove these packages for user %s? Type YES to continue: " "$USER_ID"
+    read -r confirmation
+    if [ "$confirmation" != "YES" ]; then
+        echo "Cancelled."
+        rm -f "$plan_file"
+        return
+    fi
+
+    touch "$DEBLOAT_HISTORY_FILE"
+    while IFS=$'\t' read -r package_name _description; do
+        if run_cmd pm uninstall --user "$USER_ID" "$package_name"; then
+            if ! grep -qx "$package_name" "$DEBLOAT_HISTORY_FILE"; then
+                echo "$package_name" >> "$DEBLOAT_HISTORY_FILE"
+            fi
+        fi
+    done < "$plan_file"
+    sort -u "$DEBLOAT_HISTORY_FILE" -o "$DEBLOAT_HISTORY_FILE"
+    rm -f "$plan_file"
+}
+
+restore_debloat_history() {
+    if [ ! -s "$DEBLOAT_HISTORY_FILE" ]; then
+        echo "No debloat history was found at $DEBLOAT_HISTORY_FILE."
+        return
+    fi
+
+    echo "Packages recorded in debloat history:"
+    sed 's/^/- /' "$DEBLOAT_HISTORY_FILE"
+    echo
+    printf "Restore these packages for user %s? Type YES to continue: " "$USER_ID"
+    read -r confirmation
+    if [ "$confirmation" != "YES" ]; then
+        echo "Cancelled."
+        return
+    fi
+
+    while IFS= read -r package_name; do
+        [ -z "$package_name" ] && continue
+        run_cmd cmd package install-existing --user "$USER_ID" "$package_name" ||
+            run_cmd pm install-existing --user "$USER_ID" "$package_name"
+    done < "$DEBLOAT_HISTORY_FILE"
 }
 
 set_powerkeeper() {
@@ -285,7 +461,7 @@ set_wifi_multicast_fix() {
     else
         echo ">>> Restoring optional cross-device connectivity packages when available"
         for package_name in "${MULTICAST_PACKAGES[@]}"; do
-            run_cmd cmd package install-existing "$package_name" ||
+            run_cmd cmd package install-existing --user "$USER_ID" "$package_name" ||
                 run_cmd pm enable "$package_name"
         done
     fi
@@ -425,6 +601,52 @@ ask_on_off() {
     esac
 }
 
+show_canta_debloat_menu() {
+    while true; do
+        clear
+        cat <<'EOF'
+Canta-style Debloat Menu
+
+This menu uses the Universal Debloater Alliance list, similar to Canta.
+Only packages installed for the current Android user are shown or removed.
+
+1) Update package recommendation list
+2) List installed Recommended packages
+3) Remove installed Recommended packages
+4) List installed Advanced packages
+5) Remove installed Advanced packages
+6) List installed Expert packages
+7) Remove installed Expert packages
+8) List installed Unsafe packages
+9) Remove installed Unsafe packages
+10) Restore packages removed by this tool
+0) Back
+
+Recommendation levels:
+  Recommended: safest target; usually pointless or replaceable packages.
+  Advanced: can break minor or device-specific features.
+  Expert: can break important features.
+  Unsafe: can break vital OS functionality. Avoid unless you know exactly why.
+EOF
+        printf "Select: "
+        read -r choice
+        case "$choice" in
+            1) download_uad_list; pause ;;
+            2) list_debloat_packages recommended; pause ;;
+            3) remove_debloat_packages recommended; pause ;;
+            4) list_debloat_packages advanced; pause ;;
+            5) remove_debloat_packages advanced; pause ;;
+            6) list_debloat_packages expert; pause ;;
+            7) remove_debloat_packages expert; pause ;;
+            8) list_debloat_packages unsafe; pause ;;
+            9) remove_debloat_packages unsafe; pause ;;
+            10) restore_debloat_history; pause ;;
+            0) return ;;
+            *) echo "Invalid selection."; pause ;;
+        esac
+    done
+}
+
 show_menu() {
     while true; do
         clear
@@ -464,7 +686,9 @@ Individual options
    Opens the ROM's hidden battery/performance activity when available.
 15) Show current status
    Prints the values managed by this script.
-16) Feature guide
+16) Canta-style debloat
+   Lists/removes installed packages by UAD recommendation level.
+17) Feature guide
    Shows detailed explanations and trade-offs.
 0) Exit
 EOF
@@ -486,7 +710,8 @@ EOF
             13) ask_on_off "Wi-Fi multicast battery fix" set_wifi_multicast_fix; pause ;;
             14) open_hidden_performance_menu; pause ;;
             15) show_status; pause ;;
-            16) show_feature_help; pause ;;
+            16) show_canta_debloat_menu ;;
+            17) show_feature_help; pause ;;
             0) exit 0 ;;
             *) echo "Invalid selection."; pause ;;
         esac
@@ -497,6 +722,12 @@ case "${1:-menu}" in
     -h|--help|help)
         print_usage
         ;;
+    explain)
+        show_feature_help
+        ;;
+    update-list)
+        download_uad_list
+        ;;
     *)
         check_device
         case "${1:-menu}" in
@@ -504,7 +735,10 @@ case "${1:-menu}" in
             on) apply_performance_preset ;;
             off) apply_stock_preset ;;
             status) show_status ;;
-            explain) show_feature_help ;;
+            debloat) show_canta_debloat_menu ;;
+            list-recommended) list_debloat_packages recommended ;;
+            remove-recommended) remove_debloat_packages recommended ;;
+            restore-debloat) restore_debloat_history ;;
             *)
                 echo "Invalid argument: $1"
                 print_usage
